@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Questions Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.8;
+            margin: 20px;
+            background-color: #000000;
+            color: #e0e0e0;
+        }
+        .container {
+            background-color: #1a1a1a;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.05);
+            max-width: 800px;
+            margin: 0 auto;
+            border: 1px solid #333;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin-top: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #444;
+            border-radius: 4px;
+        }
+        table {
+            width: auto;
+            margin: 20px 0;
+            border-collapse: collapse;
+            border: 1px solid #555;
+        }
+        th, td {
+            border: 1px solid #555;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #333;
+        }
+        a {
+            color: #61dafb;
+        }
+        .math-loading {
+            opacity: 0.5;
+        }
+        .math-ready {
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+    </style>
+
+    <script>
+        window.MathJax = {
+            loader: {
+                load: ['[tex]/mhchem', '[tex]/physics', '[tex]/cancel']
+            },
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                packages: {'[+]': ['mhchem', 'physics', 'cancel']},
+                tags: 'ams',
+                macros: {
+                    ce: ['\\mathrm{#1}', 1],
+                    pu: ['\\mathrm{#1}', 1]
+                }
+            },
+            startup: {
+                ready: () => {
+                    console.log('MathJax is ready');
+                    MathJax.startup.defaultReady();
+                    MathJax.startup.promise.then(() => {
+                        document.getElementById('content-area').classList.remove('math-loading');
+                        document.getElementById('content-area').classList.add('math-ready');
+                    });
+                }
+            }
+        };
+    </script>
+
+    <script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div id="content-area" class="math-loading">
+        </div>
+    </div>
+
+    <script>
+        const rawContent = "13. Succinic acid is a natural antibiotic. The structure of succinic acid is shown. ![](https://solver-ninja-chemistry-imgs.s3.eu-central-1.amazonaws.com/Screenshot+2026-03-24+at+00-03-37+November+2015+QP+-+Paper+2.pdf.png) (a) Name the functional group present in succinic acid. (b) Succinic acid can form a polymer with ethane-1,2-diol. The structure of ethane-1,2-diol is shown. ![](https://solver-ninja-chemistry-imgs.s3.eu-central-1.amazonaws.com/Screenshot+2026-03-24+at+00-04-33+November+2015+QP+-+Paper+2.pdf.png)  (i) Name the type of polymerisation which would take place between succinic acid and ethane-1,2-diol. (ii) Draw the repeating unit of the polymer formed between succinic acid and ethane-1,2-diol.";
+
+        const renderer = new marked.Renderer();
+        const originalCodespan = renderer.codespan;
+        renderer.codespan = function(code) {
+            if (code.includes('\\') || code.includes('$')) {
+                return code;
+            }
+            return originalCodespan.call(this, code);
+        };
+
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            renderer: renderer,
+            mangle: false,
+            headerIds: false,
+            smartypants: false
+        });
+
+        function protectLatex(text) {
+            const latexStore = [];
+            let counter = 0;
+
+            text = text.replace(/\$\$([^$]+)\$\$/g, (match) => {
+                const placeholder = `%%LATEX_DISPLAY_${counter}%%`;
+                latexStore.push({ placeholder, content: match });
+                counter++;
+                return placeholder;
+            });
+
+            text = text.replace(/\$([^$\n]+)\$/g, (match) => {
+                const placeholder = `%%LATEX_INLINE_${counter}%%`;
+                latexStore.push({ placeholder, content: match });
+                counter++;
+                return placeholder;
+            });
+
+            return { text, latexStore };
+        }
+
+        function restoreLatex(html, latexStore) {
+            latexStore.forEach(({ placeholder, content }) => {
+                const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                html = html.replace(new RegExp(escapedPlaceholder, 'g'), content);
+            });
+            return html;
+        }
+
+        /**
+         * CRITICAL FIX: Properly format Markdown tables
+         * The issue is that "  \n" (two spaces + newline) creates line breaks
+         * which breaks table continuity in Markdown
+         */
+        function fixMarkdownTables(text) {
+            const lines = text.split('\n');
+            const result = [];
+            let inTable = false;
+            let tableBuffer = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const trimmedLine = line.trim();
+
+                // Check if this line is a table row (starts and ends with |)
+                const isTableRow = trimmedLine.startsWith('|') && trimmedLine.includes('|');
+
+                if (isTableRow) {
+                    if (!inTable) {
+                        // Starting a new table - add blank line before if needed
+                        if (result.length > 0 && result[result.length - 1].trim() !== '') {
+                            result.push('');
+                        }
+                        inTable = true;
+                    }
+                    // Remove trailing spaces from table rows to prevent <br> insertion
+                    tableBuffer.push(trimmedLine);
+                } else {
+                    if (inTable) {
+                        // End of table - flush buffer
+                        result.push(...tableBuffer);
+                        result.push(''); // Add blank line after table
+                        tableBuffer = [];
+                        inTable = false;
+                    }
+                    // Only add non-empty lines or preserve intentional blank lines
+                    if (trimmedLine !== '' || (i > 0 && lines[i-1].trim() !== '')) {
+                        result.push(line);
+                    }
+                }
+            }
+
+            // Flush any remaining table buffer
+            if (tableBuffer.length > 0) {
+                result.push(...tableBuffer);
+                result.push('');
+            }
+
+            return result.join('\n');
+        }
+
+        function fixCommonLatexIssues(text) {
+            // Fix incorrect LaTeX commands
+            text = text.replace(/\\leg\s/g, '\\leq ');
+            text = text.replace(/\\leg}/g, '\\leq}');
+
+            // Fix \mathrm subscripts outside braces
+            text = text.replace(/\\mathrm\{([^}]+)\}_\{([^}]+)\}/g, '\\mathrm{$1_{$2}}');
+            text = text.replace(/\\mathrm\{([^}]+)\}\^\{([^}]+)\}/g, '\\mathrm{$1^{$2}}');
+
+            return text;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const contentArea = document.getElementById('content-area');
+            if (!contentArea) return;
+
+            // Step 1: Convert escaped newlines to actual newlines
+            let correctedContent = rawContent.replace(/\\n/g, '\n');
+
+            // Step 2: Fix common LaTeX issues
+            correctedContent = fixCommonLatexIssues(correctedContent);
+
+            // Step 3: CRITICAL - Fix Markdown table formatting
+            correctedContent = fixMarkdownTables(correctedContent);
+
+            // Step 4: Protect LaTeX from Markdown processing
+            const { text: protectedText, latexStore } = protectLatex(correctedContent);
+
+            // Step 5: Parse Markdown
+            let html = marked.parse(protectedText);
+
+            // Step 6: Restore LaTeX expressions
+            html = restoreLatex(html, latexStore);
+
+            // Step 7: Insert into DOM
+            contentArea.innerHTML = html;
+
+            // Step 8: Trigger MathJax rendering
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                MathJax.typesetPromise([contentArea])
+                    .then(() => {
+                        console.log('MathJax typesetting complete');
+                    })
+                    .catch(err => {
+                        console.warn('MathJax typeset error:', err);
+                    });
+            }
+        });
+    </script>
+</body>
+</html>

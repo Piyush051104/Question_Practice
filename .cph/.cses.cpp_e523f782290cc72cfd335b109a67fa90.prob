@@ -1,0 +1,1 @@
+{"name":"Local: cses","url":"c:\\Users\\piyus\\OneDrive\\Desktop\\CP\\cses.cpp","tests":[{"id":1754132963624,"input":"8 4\n3 2 4 5 1 1 5 3\n2 4\n5 6\n1 8\n3 3","output":"2\n1\n1\n4"}],"interactive":false,"memoryLimit":1024,"timeLimit":3000,"srcPath":"c:\\Users\\piyus\\OneDrive\\Desktop\\CP\\cses.cpp","group":"local","local":true}
